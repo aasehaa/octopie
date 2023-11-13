@@ -3,14 +3,22 @@ import React, { useState } from 'react';
 import './App.css';
 
 
-let device: any, server: any, service: any, characteristic: any;
+let device: any,
+  server: any,
+  service: any,
+  tempChar: any,
+  humidityChar: any,
+  pressureChar: any,
+  illuminanceChar: any;
 
 function App() {
   let [connected, setConnected] = useState<string | null>(null)
   let [tempLog, setTempLog] = useState<number[] | null>(null)
-  let [timeLog, setTimeLog] = useState<string[] | null>([]) // TODO: implement this
-  let [gpsLog, setGpsLog] = useState<string[] | null>([]) // TODO: implement this
-  // TODO: add this logging stuff on a map on the bottom of the page 
+  let [humidityLog, setHumidityLog] = useState<number[] | null>(null)
+  let [pressureLog, setPressureLog] = useState<number[] | null>(null)
+  let [illuminanceLog, setIlluminanceLog] = useState<number[] | null>(null)
+  let [timeLog, setTimeLog] = useState<string[] | null>([])
+  let [gpsLog, setGpsLog] = useState<string[] | null>([])
 
 
   async function connectBluetooth() {
@@ -20,7 +28,7 @@ function App() {
     // @ts-ignore
     let options = {
       acceptAllDevices: true,
-      optionalServices: [0x180A],
+      optionalServices: [0x180A, 0x2A6E, 0x2A6F, 0x2A6D, 0x2A77],
     }
 
     device = await navigator.bluetooth.requestDevice(options);
@@ -36,15 +44,33 @@ function App() {
 
   async function readValues() {
 
-    service = await server.getPrimaryService('0000180a-0000-1000-8000-00805f9b34fb');
+    service = await server.getPrimaryService('0000180a-0000-1000-8000-00805f9b34fb'); // UUID matching Arduino ENV Service
     console.log('got service');
-    characteristic = await service.getCharacteristic(0x2A6E);
+    tempChar = await service.getCharacteristic(0x2A6E);
+    humidityChar = await service.getCharacteristic(0x2A6F);
+    pressureChar = await service.getCharacteristic(0x2A6D);
+    illuminanceChar = await service.getCharacteristic(0x2A77);
+
     console.log('got characteristic');
 
-    var rawTemp = await characteristic.readValue();
+    var rawTemp = await tempChar.readValue();
+    var rawHumidity = await humidityChar.readValue();
+    var rawPressure = await pressureChar.readValue();
+    var rawIlluminance = await illuminanceChar.readValue();
+
+
     // Convert the value to a number
-    const floatValue = new DataView(rawTemp.buffer).getUint32(0, true); // Assuming little-endian format
-    setTempLog((prevTempLog) => (prevTempLog ? [...prevTempLog, floatValue] : [floatValue]));
+    const tempValue = new DataView(rawTemp.buffer).getUint32(0, true); // Assuming little-endian format
+    const humidityValue = new DataView(rawHumidity.buffer).getUint32(0, true); // Assuming little-endian format
+    const pressureValue = new DataView(rawPressure.buffer).getUint32(0, true); // Assuming little-endian format
+    const illuminanceValue = new DataView(rawIlluminance.buffer).getUint32(0, true); // Assuming little-endian format
+
+    // log the values in useState
+    setTempLog((prevTempLog) => (prevTempLog ? [...prevTempLog, tempValue] : [tempValue]));
+    setHumidityLog((prevHumidityLog) => (prevHumidityLog ? [...prevHumidityLog, humidityValue] : [humidityValue]));
+    setPressureLog((prevPressureLog) => (prevPressureLog ? [...prevPressureLog, pressureValue] : [pressureValue]));
+    setIlluminanceLog((prevIlluminanceLog) => (prevIlluminanceLog ? [...prevIlluminanceLog, illuminanceValue] : [illuminanceValue]));
+
 
     // Get the current time and format it as a string
     const currentTime = new Date().toLocaleTimeString();
@@ -64,7 +90,11 @@ function App() {
       }
     );
 
-    console.log('Read value:', floatValue);
+    console.log('Read temp value:', tempValue);
+    console.log('Read humidity value:', humidityValue);
+    console.log('Read pressure value:', pressureValue);
+    console.log('Read illuminance value:', illuminanceValue);
+
   }
 
 
@@ -78,9 +108,16 @@ function App() {
         <p><button id='ble_again' onClick={() => readValues()}>Read value again</button></p>
         <p>Updated values:</p>
         {tempLog?.map((value, index) =>
-          <p key={index}>
-            Temperature: {value} - Time: {timeLog && timeLog[index]} - GPS: {gpsLog && gpsLog[index]}
-          </p>
+          <div key={index} className='env_var'>
+            Time: {timeLog && timeLog[index]}
+            - GPS: {gpsLog && gpsLog[index]}
+            <p>
+              Temperature: {value}°C
+              - Humidity - {humidityLog && humidityLog[index]}%
+              - Pressure - {pressureLog && pressureLog[index]}kPa
+              - Illuminance - {illuminanceLog && illuminanceLog[index]}lx
+            </p>
+          </div>
         )}
       </div>
 
